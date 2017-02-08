@@ -32,6 +32,7 @@
 #include "Platform.h"
 
 extern char retro_base_directory[4096];
+extern char retro_game_path[4096];
 
 namespace NDS
 {
@@ -502,13 +503,11 @@ void Reset()
     Wifi::Reset();
 }
 
-void Stop()
-{
-    printf("Stopping: shutdown\n");
-    Running = false;
-    Platform::StopEmu();
-    GPU::Stop();
-    SPU::Stop();
+    // test
+    //LoadROM();
+    //LoadFirmware();
+    if (NDSCart::LoadROM(retro_game_path))
+        Running = true; // hax
 }
 
 bool DoSavestate_Scheduler(Savestate* file)
