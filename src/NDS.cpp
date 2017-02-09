@@ -31,8 +31,10 @@
 #include "Wifi.h"
 #include "Platform.h"
 
+#ifdef __LIBRETRO__
 extern char retro_base_directory[4096];
 extern char retro_game_path[4096];
+#endif
 
 namespace NDS
 {
@@ -388,10 +390,12 @@ void Reset()
     u32 i;
 
     LastSysClockCycles = 0;
-
     char path[2048];
     snprintf(path, sizeof(path), "%s/bios9.bin", retro_base_directory);
     f = fopen(path, "rb");
+#else
+    f = fopen("bios9.bin", "rb");
+#endif
     if (!f)
     {
         printf("ARM9 BIOS not found\n");
@@ -408,8 +412,12 @@ void Reset()
         fclose(f);
     }
 
+#ifdef __LIBRETRO__
     snprintf(path, sizeof(path), "%s/bios7.bin", retro_base_directory);
     f = fopen(path, "rb");
+#else
+    f = fopen("bios7.bin", "rb");
+#endif
     if (!f)
     {
         printf("ARM7 BIOS not found\n");
@@ -506,8 +514,13 @@ void Reset()
     // test
     //LoadROM();
     //LoadFirmware();
+#ifdef __LIBRETRO__
     if (NDSCart::LoadROM(retro_game_path))
         Running = true; // hax
+#else 
+    if (NDSCart::LoadROM("nsmb.nds"))
+        Running = true; // hax
+#endif
 }
 
 bool DoSavestate_Scheduler(Savestate* file)
