@@ -26,6 +26,7 @@
 
 #ifdef __LIBRETRO__
 extern char retro_base_directory[4096];
+extern char retro_firmware_status;
 #endif
 
 namespace SPI_Firmware
@@ -98,9 +99,9 @@ void Reset()
     char path[2047];
     snprintf(path, sizeof(path), "%s/firmware.bin", retro_base_directory);
     FILE* f = fopen(path, "rb");
+    f ? retro_firmware_status &= true : retro_firmware_status &= false;
 #else
     FILE* f = fopen("firmware.bin", "rb");
-#endif    
     if (!f)
     {
         printf("firmware.bin not found\n");
@@ -108,7 +109,7 @@ void Reset()
         // TODO: generate default firmware
         return;
     }
-
+#endif
     fseek(f, 0, SEEK_END);
 
     FirmwareLength = (u32)ftell(f);
