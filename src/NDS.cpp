@@ -392,7 +392,7 @@ void Reset()
 
     LastSysClockCycles = 0;
     char path[2048];
-    snprintf(path, sizeof(path), "%s/bios9.bin", retro_base_directory);
+    sprintf(path, "%s/bios9.bin", retro_base_directory);
     f = fopen(path, "rb");
     if (f)
        retro_firmware_status = true;
@@ -418,7 +418,7 @@ void Reset()
     }
 
 #ifdef __LIBRETRO__
-    snprintf(path, sizeof(path), "%s/bios7.bin", retro_base_directory);
+    sprintf(path, "%s/bios7.bin", retro_base_directory);
     f = fopen(path, "rb");
     if (f)
        retro_firmware_status = true;
