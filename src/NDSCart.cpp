@@ -25,7 +25,7 @@
 #include "Platform.h"
 
 #ifdef __LIBRETRO__
-#include <streams\file_stream_transforms.h>
+#include <streams/file_stream_transforms.h>
 #endif
 
 namespace NDSCart_SRAM
