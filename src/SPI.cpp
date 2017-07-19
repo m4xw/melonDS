@@ -100,7 +100,7 @@ void Reset()
     Firmware = NULL;
 #ifdef __LIBRETRO__
     char path[2047];
-    sprintf(path, "%s/firmware.bin", retro_base_directory);
+    sprintf(path, "%s%cfirmware.bin", retro_base_directory, platformDirSeparator);
     FILE* f = fopen(path, "rb");
     f ? retro_firmware_status &= true : retro_firmware_status &= false;
 #else
@@ -143,12 +143,16 @@ void Reset()
     fclose(f);
 
     // take a backup
-    const char* firmbkp = "firmware.bin.bak";
-    f = Platform::OpenLocalFile(firmbkp, "rb");
+#ifdef __LIBRETRO__
+	sprintf(path, "%s%cfirmware.bin.bak", retro_base_directory, platformDirSeparator);
+#else
+	sprintf(path, "firmware.bin.bak");
+#endif
+    f = fopen(path, "rb");
     if (f) fclose(f);
     else
     {
-        f = Platform::OpenLocalFile(firmbkp, "wb");
+        f = fopen(path, "wb");
         fwrite(Firmware, 1, FirmwareLength, f);
         fclose(f);
     }
