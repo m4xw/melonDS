@@ -1,4 +1,5 @@
-INCFLAGS    := -I$(CORE_DIR)/libretro-common/include
+INCFLAGS    := -I$(CORE_DIR)/libretro-common/include \
+               -I$(MELON_DIR)
 
 SOURCES_C   :=
 
@@ -9,21 +10,22 @@ endif
 SOURCES_C  += $(CORE_DIR)/libretro-common/streams/file_stream.c
 endif
 
-SOURCES_CXX := $(CORE_DIR)/src/NDS.cpp \
-					$(CORE_DIR)/src/ARM.cpp \
-					$(CORE_DIR)/src/ARMInterpreter.cpp \
-					$(CORE_DIR)/src/ARMInterpreter_ALU.cpp \
-					$(CORE_DIR)/src/ARMInterpreter_Branch.cpp \
-					$(CORE_DIR)/src/ARMInterpreter_LoadStore.cpp \
-					$(CORE_DIR)/src/CP15.cpp \
-					$(CORE_DIR)/src/DMA.cpp \
-					$(CORE_DIR)/src/GPU.cpp \
-					$(CORE_DIR)/src/GPU2D.cpp \
-					$(CORE_DIR)/src/GPU3D.cpp \
-					$(CORE_DIR)/src/GPU3D_Soft.cpp \
-					$(CORE_DIR)/src/NDSCart.cpp \
-					$(CORE_DIR)/src/RTC.cpp \
-					$(CORE_DIR)/src/SPI.cpp \
-					$(CORE_DIR)/src/SPU.cpp \
-					$(CORE_DIR)/src/Wifi.cpp \
-					$(CORE_DIR)/src/libretro.cpp
+SOURCES_CXX := $(MELON_DIR)/NDS.cpp \
+					$(MELON_DIR)/ARM.cpp \
+					$(MELON_DIR)/ARMInterpreter.cpp \
+					$(MELON_DIR)/ARMInterpreter_ALU.cpp \
+					$(MELON_DIR)/ARMInterpreter_Branch.cpp \
+					$(MELON_DIR)/ARMInterpreter_LoadStore.cpp \
+					$(MELON_DIR)/CP15.cpp \
+					$(MELON_DIR)/DMA.cpp \
+					$(MELON_DIR)/GPU.cpp \
+					$(MELON_DIR)/GPU2D.cpp \
+					$(MELON_DIR)/GPU3D.cpp \
+					$(MELON_DIR)/GPU3D_Soft.cpp \
+					$(MELON_DIR)/NDSCart.cpp \
+					$(MELON_DIR)/RTC.cpp \
+					$(MELON_DIR)/SPI.cpp \
+					$(MELON_DIR)/SPU.cpp \
+					$(MELON_DIR)/Config.cpp \
+					$(MELON_DIR)/Wifi.cpp \
+					$(CORE_DIR)/libretro.cpp

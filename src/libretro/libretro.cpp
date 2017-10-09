@@ -25,6 +25,7 @@
 #define pcap_dev_name name
 #endif
 
+#include "Platform.h"
 #include "NDS.h"
 #include "GPU.h"
 #include "SPU.h"
@@ -194,7 +195,7 @@ void retro_get_system_info(struct retro_system_info *info)
 #ifndef GIT_VERSION
 #define GIT_VERSION ""
 #endif
-   info->library_version  = "0.4" GIT_VERSION;
+   info->library_version  = "0.5" GIT_VERSION;
    info->need_fullpath    = true;
    info->valid_extensions = "nds";
 }
@@ -206,6 +207,11 @@ static retro_input_state_t input_state_cb;
 
 namespace Platform
 {
+
+   void StopEmu()
+   {
+       return;
+   }
 
    void Semaphore_Reset(void *sema)
    {
@@ -357,6 +363,7 @@ namespace Platform
       int slen = sendto(MPSocket, (const char*)PacketBuffer, len+8, 0, &MPSendAddr, sizeof(sockaddr_t));
       if (slen < 8) return 0;
       return slen - 8;
+
    }
 
    int MP_RecvPacket(u8* data, bool block)

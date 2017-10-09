@@ -30,7 +30,8 @@ else ifneq ($(findstring MINGW,$(shell uname -a)),)
 endif
 
 
-CORE_DIR    += .
+CORE_DIR    += ./src/libretro/
+MELON_DIR     += ./src/
 TARGET_NAME := melonds
 LIBS		    = -lm
 DEFINES :=
@@ -64,12 +65,12 @@ ifeq ($(platform), unix)
 	EXT ?= so
    TARGET := $(TARGET_NAME)_libretro.$(EXT)
    fpic := -fPIC
-   SHARED := -shared -Wl,--version-script=$(CORE_DIR)/src/link.T -Wl,--no-undefined
+   SHARED := -shared -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined
 	#LIBS +=-lpthread
 else ifeq ($(platform), linux-portable)
    TARGET := $(TARGET_NAME)_libretro.$(EXT)
    fpic := -fPIC -nostdlib
-   SHARED := -shared -Wl,--version-script=$(CORE_DIR)/src/link.T
+   SHARED := -shared -Wl,--version-script=$(CORE_DIR)/link.T
 	LIBS =
 	#LIBS +=-lpthread
 else ifneq (,$(findstring osx,$(platform)))
@@ -103,12 +104,12 @@ endif
 else ifneq (,$(findstring qnx,$(platform)))
 	TARGET := $(TARGET_NAME)_libretro_qnx.so
    fpic := -fPIC
-   SHARED := -shared -Wl,--version-script=$(CORE_DIR)/src/link.T -Wl,--no-undefined
+   SHARED := -shared -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined
 	#LIBS +=-lpthread
 else ifeq ($(platform), emscripten)
    TARGET := $(TARGET_NAME)_libretro_emscripten.bc
    fpic := -fPIC
-   SHARED := -shared -Wl,--version-script=$(CORE_DIR)/src/link.T -Wl,--no-undefined
+   SHARED := -shared -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined
 else ifeq ($(platform), vita)
    TARGET := $(TARGET_NAME)_vita.a
    CC = arm-vita-eabi-gcc
@@ -167,7 +168,7 @@ LIBS = ws2_32.lib winmm.lib
 else
    CC = gcc
    TARGET := $(TARGET_NAME)_libretro.dll
-   SHARED := -shared -static-libgcc -static-libstdc++ -s -Wl,--version-script=$(CORE_DIR)/src/link.T -Wl,--no-undefined
+   SHARED := -shared -static-libgcc -static-libstdc++ -s -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined
    LDFLAGS += -lws2_32 -lwinmm
 endif
 
