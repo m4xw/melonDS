@@ -543,10 +543,9 @@ void retro_run(void)
    for (i = 0; i < VIDEO_PIXELS * sizeof(uint32_t); i += sizeof(uint32_t))
    {
       uint8_t *pixel = (uint8_t*)GPU::Framebuffer + i;
-      /* swap red and blue */
-      frame_buf[i + 0] = pixel[2];
+      frame_buf[i + 0] = pixel[0];
       frame_buf[i + 1] = pixel[1];
-      frame_buf[i + 2] = pixel[0];
+      frame_buf[i + 2] = pixel[2];
       frame_buf[i + 3] = pixel[3];
    }
    video_cb(frame_buf, VIDEO_WIDTH, VIDEO_HEIGHT, VIDEO_WIDTH * sizeof(uint32_t));
