@@ -143,7 +143,6 @@ void ssem_signal(ssem_t *semaphore)
 }
 #endif
 
-static uint8_t *frame_buf;
 static struct retro_log_callback logging;
 static retro_log_printf_t log_cb;
 char retro_base_directory[4096];
@@ -167,15 +166,13 @@ void retro_init(void)
    const char *dir = NULL;
 
    srand(time(NULL));
-   frame_buf = (uint8_t*)malloc(VIDEO_PIXELS * sizeof(uint32_t));
    if (environ_cb(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &dir) && dir)
       sprintf(retro_base_directory, "%s", dir);
 }
 
 void retro_deinit(void)
 {
-   free(frame_buf);
-   frame_buf = NULL;
+	return;
 }
 
 unsigned retro_api_version(void)
@@ -540,15 +537,7 @@ void retro_run(void)
    unsigned i;
    update_input();
    NDS::RunFrame();
-   for (i = 0; i < VIDEO_PIXELS * sizeof(uint32_t); i += sizeof(uint32_t))
-   {
-      uint8_t *pixel = (uint8_t*)GPU::Framebuffer + i;
-      frame_buf[i + 0] = pixel[0];
-      frame_buf[i + 1] = pixel[1];
-      frame_buf[i + 2] = pixel[2];
-      frame_buf[i + 3] = pixel[3];
-   }
-   video_cb(frame_buf, VIDEO_WIDTH, VIDEO_HEIGHT, VIDEO_WIDTH * sizeof(uint32_t));
+   video_cb((uint8_t*)GPU::Framebuffer, VIDEO_WIDTH, VIDEO_HEIGHT, VIDEO_WIDTH * sizeof(uint32_t));
    audio_callback();
 
    bool updated = false;
