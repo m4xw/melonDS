@@ -482,6 +482,7 @@ void retro_reset(void)
 {
    x_coord = 0;
    y_coord = 0;
+   NDS::Reset;
 }
 
 static void update_input(void)
@@ -579,7 +580,7 @@ bool retro_load_game(const struct retro_game_info *info)
 
 void retro_unload_game(void)
 {
-
+   NDS::DeInit();
 }
 
 unsigned retro_get_region(void)
