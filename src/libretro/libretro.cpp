@@ -482,7 +482,7 @@ void retro_reset(void)
 {
    x_coord = 0;
    y_coord = 0;
-   NDS::Reset;
+   NDS::Reset();
 }
 
 static void update_input(void)
