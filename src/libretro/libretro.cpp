@@ -25,6 +25,7 @@
 #define pcap_dev_name name
 #endif
 
+#include "version.h"
 #include "Platform.h"
 #include "NDS.h"
 #include "GPU.h"
@@ -192,7 +193,7 @@ void retro_get_system_info(struct retro_system_info *info)
 #ifndef GIT_VERSION
 #define GIT_VERSION ""
 #endif
-   info->library_version  = "0.5" GIT_VERSION;
+   info->library_version  = MELONDS_VERSION GIT_VERSION;
    info->need_fullpath    = true;
    info->valid_extensions = "nds";
 }
