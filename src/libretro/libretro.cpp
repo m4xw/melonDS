@@ -31,6 +31,7 @@
 #include "GPU.h"
 #include "SPU.h"
 #include "libretro.h"
+#include "streams/file_stream.h"
 
 #define VIDEO_WIDTH 256
 #define VIDEO_HEIGHT 384
@@ -430,6 +431,7 @@ static struct retro_rumble_interface rumble;
 
 void retro_set_environment(retro_environment_t cb)
 {
+   struct retro_vfs_interface_info vfs_iface_info;
    environ_cb = cb;
 
    if (cb(RETRO_ENVIRONMENT_GET_LOG_INTERFACE, &logging))
@@ -447,6 +449,11 @@ void retro_set_environment(retro_environment_t cb)
    };
 
    cb(RETRO_ENVIRONMENT_SET_CONTROLLER_INFO, (void*)ports);
+
+   vfs_iface_info.required_interface_version = FILESTREAM_REQUIRED_VFS_VERSION;
+   vfs_iface_info.iface = NULL;
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VFS_INTERFACE, &vfs_iface_info))
+	   filestream_vfs_init(&vfs_iface_info);
 }
 
 void retro_set_audio_sample(retro_audio_sample_t cb)
