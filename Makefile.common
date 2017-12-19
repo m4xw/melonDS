@@ -7,9 +7,12 @@ ifneq ($(STATIC_LINKING), 1)
 ifeq ($(HAVE_THREADS), 1)
 SOURCES_C += $(CORE_DIR)/libretro-common/rthreads/rthreads.c
 endif
-SOURCES_C  += $(CORE_DIR)/libretro-common/streams/file_stream.c
-SOURCES_C  += $(CORE_DIR)/libretro-common/streams/file_stream_transforms.c
-SOURCES_C  += $(CORE_DIR)/libretro-common/vfs/vfs_implementation.c
+SOURCES_C  += $(CORE_DIR)/libretro-common/compat/compat_strl.c \
+              $(CORE_DIR)/libretro-common/compat/fopen_utf8.c \
+              $(CORE_DIR)/libretro-common/encodings/encoding_utf.c \
+              $(CORE_DIR)/libretro-common/streams/file_stream.c \
+              $(CORE_DIR)/libretro-common/streams/file_stream_transforms.c \
+              $(CORE_DIR)/libretro-common/vfs/vfs_implementation.c
 endif
 
 SOURCES_CXX := $(MELON_DIR)/NDS.cpp \
