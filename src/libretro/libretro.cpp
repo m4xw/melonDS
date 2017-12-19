@@ -31,7 +31,7 @@
 #include "GPU.h"
 #include "SPU.h"
 #include "libretro.h"
-#include "streams/file_stream.h"
+#include <streams/file_stream.h>
 
 #define VIDEO_WIDTH 256
 #define VIDEO_HEIGHT 384
