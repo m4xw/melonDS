@@ -8,6 +8,8 @@ ifeq ($(HAVE_THREADS), 1)
 SOURCES_C += $(CORE_DIR)/libretro-common/rthreads/rthreads.c
 endif
 SOURCES_C  += $(CORE_DIR)/libretro-common/streams/file_stream.c
+SOURCES_C  += $(CORE_DIR)/libretro-common/streams/file_stream_transforms.c
+SOURCES_C  += $(CORE_DIR)/libretro-common/vfs/vfs_implementation.c
 endif
 
 SOURCES_CXX := $(MELON_DIR)/NDS.cpp \
