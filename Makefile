@@ -36,12 +36,15 @@ else ifneq ($(findstring MINGW,$(shell uname -a)),)
 	system_platform = win
 endif
 
-
 CORE_DIR    += ./src/libretro/
 MELON_DIR     += ./src/
 TARGET_NAME := melonds
 LIBS		    = -lm
 DEFINES :=
+
+ifneq ($(findstring Haiku,$(shell uname -s)),)
+LIBS += -lnetwork
+endif
 
 # GIT HASH
 GIT_VERSION := " $(shell git rev-parse --short HEAD || echo unknown)"

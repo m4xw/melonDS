@@ -25,6 +25,10 @@
 #define pcap_dev_name name
 #endif
 
+#if defined(__HAIKU__)
+#include <posix/sys/select.h>
+#endif
+
 #include "version.h"
 #include "Platform.h"
 #include "NDS.h"
