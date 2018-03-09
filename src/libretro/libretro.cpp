@@ -444,7 +444,8 @@ void retro_set_environment(retro_environment_t cb)
       log_cb = fallback_log;
 
    static const struct retro_controller_description controllers[] = {
-      { "Nintendo DS", RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_JOYPAD, 0) },
+      { "Nintendo DS", RETRO_DEVICE_JOYPAD },
+      { NULL, 0 },
    };
 
    static const struct retro_controller_info ports[] = {
