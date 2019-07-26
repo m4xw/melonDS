@@ -24,9 +24,6 @@
 #include "CRC32.h"
 #include "Platform.h"
 
-#ifdef __LIBRETRO__
-#include <streams/file_stream_transforms.h>
-#endif
 
 namespace NDSCart_SRAM
 {
@@ -248,6 +245,7 @@ void Write_EEPROM(u8 val, bool islast)
     switch (CurCmd)
     {
     case 0x02:
+    case 0x0A:
         if (DataPos < addrsize)
         {
             Addr <<= 8;
@@ -262,6 +260,7 @@ void Write_EEPROM(u8 val, bool islast)
         break;
 
     case 0x03:
+    case 0x0B:
         if (DataPos < addrsize)
         {
             Addr <<= 8;

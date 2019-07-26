@@ -159,6 +159,16 @@ else ifeq ($(platform), classic_armv7_a7)
 	  endif
 	endif
 #######################################
+# Nintendo Switch (libnx)
+else ifeq ($(platform), libnx)
+   include $(DEVKITPRO)/libnx/switch_rules
+   TARGET := $(TARGET_NAME)_libretro_$(platform).a
+   DEFINES := -DSWITCH=1 -D__SWITCH__=1
+   CFLAGS := $(DEFINES) -fPIE -I$(LIBNX)/include/ -ffunction-sections -fdata-sections -ftls-model=local-exec -specs=$(LIBNX)/switch.specs
+   CFLAGS += -march=armv8-a -mtune=cortex-a57 -mtp=soft -mcpu=cortex-a57+crc+fp+simd -ffast-math
+   CXXFLAGS := $(ASFLAGS) $(CFLAGS)
+   STATIC_LINKING = 1
+#######################################
 
 # Windows MSVC 2017 all architectures
 else ifneq (,$(findstring windows_msvc2017,$(platform)))
@@ -324,8 +334,8 @@ OBJECTS := $(SOURCES_C:.c=.o) $(SOURCES_CXX:.cpp=.o)
 #CXXFLAGS  += -DHAVE_THREADS
 CXXFLAGS += -std=c++11
 
-CFLAGS   += -Wall -D__LIBRETRO__ $(fpic) $(INCFLAGS) $(INCFLAGS_PLATFORM)
-CXXFLAGS += -Wall -D__LIBRETRO__ $(fpic) $(INCFLAGS) $(INCFLAGS_PLATFORM)
+CFLAGS   += -Wall -D__LIBRETRO__ $(fpic) $(INCFLAGS) $(DEFINES) $(INCFLAGS_PLATFORM)
+CXXFLAGS += -Wall -D__LIBRETRO__ $(fpic) $(INCFLAGS) $(DEFINES) $(INCFLAGS_PLATFORM)
 
 OBJOUT   = -o
 LINKOUT  = -o 

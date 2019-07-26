@@ -28,18 +28,27 @@
 #if defined(__HAIKU__)
 #include <posix/sys/select.h>
 #endif
+#if defined(__SWITCH__)
+#include <sys/select.h>
+#endif
+
+#ifdef HAVE_PCAP
+#include "libui_sdl/LAN_PCap.h"
+#include "libui_sdl/LAN_Socket.h"
+#endif
 
 #include "version.h"
+#include "Config.h"
 #include "Platform.h"
 #include "NDS.h"
 #include "GPU.h"
 #include "SPU.h"
 #include "libretro.h"
 #include <streams/file_stream.h>
+#include <streams/memory_stream.h>
+#include <file/file_path.h>
 
-#define VIDEO_WIDTH 256
-#define VIDEO_HEIGHT 384
-#define VIDEO_PIXELS VIDEO_WIDTH * VIDEO_HEIGHT
+#include "screenlayout.h"
 
 #ifndef INVALID_SOCKET
 #define INVALID_SOCKET  (socket_t)-1
@@ -149,10 +158,28 @@ void ssem_signal(ssem_t *semaphore)
 }
 #endif
 
+static inline int32_t Clamp(int32_t value, int32_t min, int32_t max)
+{
+   return std::max(min, std::min(max, value));
+}
+
+static bool touching;
+static int32_t touch_x;
+static int32_t touch_y;
+
+enum TouchMode
+{
+   Disabled,
+   Mouse,
+   Touch,
+};
+
+static TouchMode current_touch_mode = TouchMode::Disabled;
+
 static struct retro_log_callback logging;
 static retro_log_printf_t log_cb;
 char retro_base_directory[4096];
-char retro_game_path[4096];
+char retro_saves_directory[4096];
 bool retro_firmware_status;
 
 static void fallback_log(enum retro_log_level level, const char *fmt, ...)
@@ -174,6 +201,9 @@ void retro_init(void)
    srand(time(NULL));
    if (environ_cb(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &dir) && dir)
       sprintf(retro_base_directory, "%s", dir);
+
+	if (environ_cb(RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY, &dir) && dir)
+      sprintf(retro_saves_directory, "%s", dir);
 }
 
 void retro_deinit(void)
@@ -208,8 +238,95 @@ static retro_audio_sample_batch_t audio_cb;
 static retro_input_poll_t input_poll_cb;
 static retro_input_state_t input_state_cb;
 
+
 namespace Platform
 {
+FILE* OpenFile(const char* path, const char* mode, bool mustexist)
+{
+    FILE* ret;
+
+    if (mustexist)
+    {
+        ret = fopen(path, "rb");
+        if (ret) ret = freopen(path, mode, ret);
+    }
+    else
+        ret = fopen(path, mode);
+
+    return ret;
+}
+
+   FILE* OpenLocalFile(const char* path, const char* mode)
+   {
+      bool relpath = false;
+      int pathlen = strlen(path);
+
+   #ifdef __WIN32__
+      if (pathlen > 3)
+      {
+         if (path[1] == ':' && path[2] == '\\')
+               return OpenFile(path, mode);
+      }
+   #else
+      if (pathlen > 1)
+      {
+         if (path[0] == '/')
+               return OpenFile(path, mode);
+      }
+   #endif
+
+      if (pathlen >= 3)
+      {
+         if (path[0] == '.' && path[1] == '.' && (path[2] == '/' || path[2] == '\\'))
+               relpath = true;
+      }
+
+      int emudirlen = strlen(retro_base_directory);
+      char* emudirpath;
+      if (emudirlen)
+      {
+         int len = emudirlen + 1 + pathlen + 1;
+         emudirpath = new char[len];
+         strncpy(&emudirpath[0], retro_base_directory, emudirlen - 1);
+         emudirpath[emudirlen] = '/';
+         strncpy(&emudirpath[emudirlen+1], path, pathlen - 1);
+         emudirpath[emudirlen+1+pathlen] = '\0';
+      }
+      else
+      {
+         emudirpath = new char[pathlen+1];
+         strncpy(&emudirpath[0], path, pathlen - 1);
+         emudirpath[pathlen] = '\0';
+      }
+
+      // Locations are application directory, and AppData/melonDS on Windows or XDG_CONFIG_HOME/melonds on Linux
+
+      FILE* f;
+
+      // First check current working directory
+      f = OpenFile(path, mode, true);
+      if (f) { delete[] emudirpath; return f; }
+
+      // then emu directory
+      f = OpenFile(emudirpath, mode, true);
+      if (f) { delete[] emudirpath; return f; }
+
+      if (!relpath)
+      {
+         std::string fullpath = std::string(retro_base_directory) + "/melonds/" + path;
+         f = OpenFile(fullpath.c_str(), mode, true);
+         if (f) { delete[] emudirpath; return f; }
+      }
+
+      if (mode[0] != 'r')
+      {
+         f = OpenFile(emudirpath, mode);
+         if (f) { delete[] emudirpath; return f; }
+      }
+
+      delete[] emudirpath;
+      return NULL;
+   }
 
    void StopEmu()
    {
@@ -418,17 +535,73 @@ namespace Platform
       return rlen;
    }
 
+   bool LAN_Init()
+   {
+#ifdef HAVE_PCAP
+    if (Config::DirectLAN)
+    {
+        if (!LAN_PCap::Init(true))
+            return false;
+    }
+    else
+    {
+        if (!LAN_Socket::Init())
+            return false;
+    }
+
+    return true;
+#else
+   return false;
+#endif
+   }
+
+   void LAN_DeInit()
+   {
+      // checkme. blarg
+      //if (Config::DirectLAN)
+      //    LAN_PCap::DeInit();
+      //else
+      //    LAN_Socket::DeInit();
+#ifdef HAVE_PCAP
+      LAN_PCap::DeInit();
+      LAN_Socket::DeInit();
+#endif
+   }
+
+   int LAN_SendPacket(u8* data, int len)
+   {
+#ifdef HAVE_PCAP
+      if (Config::DirectLAN)
+         return LAN_PCap::SendPacket(data, len);
+      else
+         return LAN_Socket::SendPacket(data, len);
+#else
+      return 0;
+#endif
+   }
+
+   int LAN_RecvPacket(u8* data)
+   {
+#ifdef HAVE_PCAP
+      if (Config::DirectLAN)
+         return LAN_PCap::RecvPacket(data);
+      else
+         return LAN_Socket::RecvPacket(data);
+#else
+      return 0;
+#endif
+   }
 };
 
 void retro_get_system_av_info(struct retro_system_av_info *info)
 {
    info->timing.fps            = 32.0f * 1024.0f * 1024.0f / 560190.0f;
    info->timing.sample_rate    = 32.0f * 1024.0f;
-   info->geometry.base_width   = VIDEO_WIDTH;
-   info->geometry.base_height  = VIDEO_HEIGHT;
-   info->geometry.max_width    = VIDEO_WIDTH;
-   info->geometry.max_height   = VIDEO_HEIGHT;
-   info->geometry.aspect_ratio = (float)VIDEO_WIDTH / (float)VIDEO_HEIGHT;
+   info->geometry.base_width   = screen_layout_data.buffer_width;
+   info->geometry.base_height  = screen_layout_data.buffer_height;
+   info->geometry.max_width    = screen_layout_data.buffer_width;
+   info->geometry.max_height   = screen_layout_data.buffer_height;
+   info->geometry.aspect_ratio = (float)screen_layout_data.buffer_width / (float)screen_layout_data.buffer_height;
 }
 
 static struct retro_rumble_interface rumble;
@@ -437,6 +610,17 @@ void retro_set_environment(retro_environment_t cb)
 {
    struct retro_vfs_interface_info vfs_iface_info;
    environ_cb = cb;
+
+  static const retro_variable values[] =
+   {
+      { "melonds_boot_directly", "Boot game directly; enabled|disabled" },
+      { "melonds_screen_layout", "Screen Layout; Top/Bottom|Bottom/Top|Left/Right|Right/Left|Top Only|Bottom Only" },
+      { "melonds_threaded_renderer", "Threaded software renderer; disabled|enabled" },
+      { "melonds_touch_mode", "Touch mode; disabled|Mouse|Touch" },
+      { 0, 0 }
+   };
+
+   environ_cb(RETRO_ENVIRONMENT_SET_VARIABLES, (void*)values);
 
    if (cb(RETRO_ENVIRONMENT_GET_LOG_INTERFACE, &logging))
       log_cb = logging.log;
@@ -485,16 +669,8 @@ void retro_set_video_refresh(retro_video_refresh_t cb)
    video_cb = cb;
 }
 
-static unsigned x_coord;
-static unsigned y_coord;
-static unsigned phase;
-static int mouse_rel_x;
-static int mouse_rel_y;
-
 void retro_reset(void)
 {
-   x_coord = 0;
-   y_coord = 0;
    NDS::Reset();
 }
 
@@ -527,12 +703,124 @@ static void update_input(void)
          NDS::ReleaseKey(nds_key);
       }
    }
+
+   if(current_screen_layout != ScreenLayout::TopOnly)
+   {
+      switch(current_touch_mode)
+      {
+         case TouchMode::Disabled:
+            touching = false;
+            break;
+         case TouchMode::Mouse:
+            {
+               int16_t mouse_x = input_state_cb(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_X);
+               int16_t mouse_y = input_state_cb(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_Y);
+
+               touching = input_state_cb(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_LEFT);
+
+               touch_x = Clamp(touch_x + mouse_x, 0, screen_layout_data.screen_width);
+               touch_y = Clamp(touch_y + mouse_y, 0, screen_layout_data.screen_height);
+            }
+
+            break;
+         case TouchMode::Touch:
+            if(input_state_cb(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_PRESSED))
+            {
+               int16_t pointer_x = input_state_cb(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_X);
+               int16_t pointer_y = input_state_cb(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_Y);
+
+               int x = ((int)pointer_x + 0x8000) * screen_layout_data.buffer_width / 0x10000;
+               int y = ((int)pointer_y + 0x8000) * screen_layout_data.buffer_height / 0x10000;
+
+               if ((x >= screen_layout_data.touch_offset_x) && (x < screen_layout_data.touch_offset_x + screen_layout_data.screen_width) &&
+                     (y >= screen_layout_data.touch_offset_y) && (y < screen_layout_data.touch_offset_y + screen_layout_data.screen_height))
+               {
+                  touching = true;
+
+                  touch_x = (x - screen_layout_data.touch_offset_x) * VIDEO_WIDTH / screen_layout_data.screen_width;
+                  touch_y = (y - screen_layout_data.touch_offset_y) * VIDEO_HEIGHT / screen_layout_data.screen_height;
+               }
+            }
+            else if(touching)
+            {
+               touching = false;
+            }
+
+            break;
+      }
+   }
+   else
+   {
+      touching = false;
+   }
+
+   if(touching)
+   {
+      NDS::TouchScreen(touch_x, touch_y);
+      NDS::PressKey(16+6);
+   }
+   else
+   {
+      NDS::ReleaseScreen();
+      NDS::ReleaseKey(16+6);
+   }
 }
 
 
 static void check_variables(void)
 {
+   struct retro_variable var = {0};
 
+   var.key = "melonds_boot_directly";
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      if (!strcmp(var.value, "disabled"))
+         Config::DirectBoot = false;
+      else
+         Config::DirectBoot = true;
+   }
+
+   ScreenLayout layout;
+   var.key = "melonds_screen_layout";
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      if (!strcmp(var.value, "Top/Bottom"))
+         layout = ScreenLayout::TopBottom;
+      else if (!strcmp(var.value, "Bottom/Top"))
+         layout = ScreenLayout::BottomTop;
+      else if (!strcmp(var.value, "Left/Right"))
+         layout = ScreenLayout::LeftRight;
+      else if (!strcmp(var.value, "Right/Left"))
+         layout = ScreenLayout::RightLeft;
+      else if (!strcmp(var.value, "Top Only"))
+         layout = ScreenLayout::TopOnly;
+      else if (!strcmp(var.value, "Bottom Only"))
+         layout = ScreenLayout::BottomOnly;
+   } else {
+      layout = ScreenLayout::TopBottom;
+   }
+
+   update_screenlayout(layout, &screen_layout_data, false);
+
+   var.key = "melonds_threaded_renderer";
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      if (!strcmp(var.value, "enabled"))
+         Config::Threaded3D = true;
+      else
+         Config::Threaded3D = false;
+   }
+
+   var.key = "melonds_touch_mode";
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      if (!strcmp(var.value, "Mouse"))
+         current_touch_mode = TouchMode::Mouse;
+      else if (!strcmp(var.value, "Touch"))
+         current_touch_mode = TouchMode::Touch;
+      else
+         current_touch_mode = TouchMode::Disabled;
+   }
 }
 
 static void audio_callback(void)
@@ -546,17 +834,71 @@ static void audio_callback(void)
    audio_cb(buffer, avail);
 }
 
+void copy_screen(ScreenLayoutData *data, uint32_t* src, unsigned offset)
+{
+   if (data->direct_copy)
+   {
+      memcpy((uint32_t *)data->buffer_ptr + offset, src, data->screen_width * data->screen_height * data->pixel_size);
+   } else {
+      unsigned y;
+      for (y = 0; y < data->screen_height; y++)
+      {
+         memcpy((uint16_t *)data->buffer_ptr + offset + (y * data->screen_width * data->pixel_size),
+            src + (y * data->screen_width), data->screen_width * data->pixel_size);
+      }
+   }
+}
+
+#define CURSOR_SIZE 2
+void draw_cursor(ScreenLayoutData *data, int32_t x, int32_t y)
+{
+   uint32_t* base_offset = (uint32_t*)data->buffer_ptr;
+
+   uint32_t start_y = Clamp(y - CURSOR_SIZE, 0, data->screen_height);
+   uint32_t end_y = Clamp(y + CURSOR_SIZE, 0, data->screen_height);
+
+   for (uint32_t y = start_y; y < end_y; y++)
+   {
+      uint32_t start_x = Clamp(x - CURSOR_SIZE, 0, data->screen_width);
+      uint32_t end_x = Clamp(x + CURSOR_SIZE, 0, data->screen_width);
+
+      for (uint32_t x = start_x; x < end_x; x++)
+      {
+         uint32_t* offset = base_offset + ((y + data->touch_offset_y) * data->buffer_width) + ((x + data->touch_offset_x));
+         uint32_t pixel = *offset;
+         *(uint32_t*)offset = (0xFFFFFF - pixel) | 0xFF000000;
+      }
+   }
+}
+
 void retro_run(void)
 {
-   unsigned i;
    update_input();
    NDS::RunFrame();
-   video_cb((uint8_t*)GPU::Framebuffer, VIDEO_WIDTH, VIDEO_HEIGHT, VIDEO_WIDTH * sizeof(uint32_t));
+
+   int frontbuf = GPU::FrontBuffer;
+
+   if(screen_layout_data.enable_top_screen)
+      copy_screen(&screen_layout_data, GPU::Framebuffer[frontbuf][0], screen_layout_data.top_screen_offset);
+   if(screen_layout_data.enable_bottom_screen)
+      copy_screen(&screen_layout_data, GPU::Framebuffer[frontbuf][1], screen_layout_data.bottom_screen_offset);
+
+   if(current_touch_mode == TouchMode::Mouse && current_screen_layout != ScreenLayout::TopOnly)
+      draw_cursor(&screen_layout_data, touch_x, touch_y);
+
+   video_cb((uint8_t*)screen_layout_data.buffer_ptr, screen_layout_data.buffer_width, screen_layout_data.buffer_height, screen_layout_data.buffer_width * sizeof(uint32_t));
+
    audio_callback();
 
    bool updated = false;
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &updated) && updated)
+   {
       check_variables();
+
+      struct retro_system_av_info updated_av_info;
+      retro_get_system_av_info(&updated_av_info);
+      environ_cb(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO, &updated_av_info);
+   }
 }
 
 bool retro_load_game(const struct retro_game_info *info)
@@ -586,11 +928,20 @@ bool retro_load_game(const struct retro_game_info *info)
       return false;
    }
 
-   sprintf(retro_game_path, "%s", info->path);
-   NDS::Init();
-   NDS::LoadROM(info->path, true);
-
    check_variables();
+
+   if(!NDS::Init())
+      return false;
+
+   char game_name[256];
+   fill_pathname_base_noext(game_name, info->path, sizeof(game_name));
+
+   std::string save_path = std::string(retro_saves_directory) + std::string(game_name) + ".sav";
+
+   NDS::LoadROM(info->path, save_path.c_str(), Config::DirectBoot);
+
+   GPU3D::InitRenderer(false);
+   GPU3D::UpdateRendererConfig();
 
    (void)info;
    if (!retro_firmware_status)
@@ -616,17 +967,25 @@ bool retro_load_game_special(unsigned type, const struct retro_game_info *info, 
 
 size_t retro_serialize_size(void)
 {
-   return false;
+   return 7041996;
 }
 
-bool retro_serialize(void *data_, size_t size)
+bool retro_serialize(void *data, size_t size)
 {
-   return false;
+   Savestate* savestate = new Savestate(data, size, true);
+   NDS::DoSavestate(savestate);
+   delete savestate;
+
+   return true;
 }
 
-bool retro_unserialize(const void *data_, size_t size)
+bool retro_unserialize(const void *data, size_t size)
 {
-   return false;
+   Savestate* savestate = new Savestate((void*)data, size, false);
+   NDS::DoSavestate(savestate);
+   delete savestate;
+
+   return true;
 }
 
 void *retro_get_memory_data(unsigned type)
@@ -655,3 +1014,35 @@ void retro_cheat_set(unsigned index, bool enabled, const char *code)
    (void)code;
 }
 
+namespace Config
+{
+   int _3DRenderer;
+   int Threaded3D;
+
+   int GL_ScaleFactor;
+   int GL_Antialias;
+
+   bool DirectBoot;
+   bool DirectLAN;
+
+   ConfigEntry ConfigFile[] =
+   {
+      {"3DRenderer", 0, &_3DRenderer, 1, NULL, 0},
+      {"Threaded3D", 0, &Threaded3D, 1, NULL, 0},
+
+      {"GL_ScaleFactor", 0, &GL_ScaleFactor, 1, NULL, 0},
+      {"GL_Antialias", 0, &GL_Antialias, 0, NULL, 0},
+
+      {"", -1, NULL, 0, NULL, 0}
+   };
+
+   void Load()
+   {
+
+   }
+
+   void Save()
+   {
+
+   }
+}

@@ -398,7 +398,7 @@ void Reset()
     FILE* f;
     u32 i;
 
-    LastSysClockCycles = 0;
+#ifdef __LIBRETRO__
     char path[2048];
     sprintf(path, "%s%cbios9.bin", retro_base_directory, platformDirSeparator);
     f = fopen(path, "rb");
@@ -407,8 +407,9 @@ void Reset()
     else
        retro_firmware_status = false;
 #else
-    f = fopen("bios9.bin", "rb");
+    f = Platform::OpenLocalFile("bios9.bin", "rb");
 #endif
+    LastSysClockCycles = 0;
     if (!f)
     {
         printf("ARM9 BIOS not found\n");
@@ -433,8 +434,9 @@ void Reset()
     else
        retro_firmware_status = false;
 #else
-    f = fopen("bios7.bin", "rb");
+    f = Platform::OpenLocalFile("bios7.bin", "rb");
 #endif
+
     if (!f)
     {
         printf("ARM7 BIOS not found\n");
@@ -535,22 +537,6 @@ void Stop()
     Platform::StopEmu();
     GPU::Stop();
     SPU::Stop();
-}
-
-void LoadROM(const char* path, bool direct)
-{
-    Reset();
-
-    if (NDSCart::LoadROM(path, direct))
-        Running = true;
-    else
-        printf("Failed to load ROM %s\n", path);
-}
-
-void LoadBIOS()
-{
-    Reset();
-    Running = true;
 }
 
 bool DoSavestate_Scheduler(Savestate* file)

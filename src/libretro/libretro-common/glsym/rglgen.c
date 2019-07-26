@@ -1,7 +1,7 @@
-/* Copyright  (C) 2010-2018 The RetroArch team
+/* Copyright (C) 2010-2018 The RetroArch team
  *
  * ---------------------------------------------------------------------------------------
- * The following license statement only applies to this file (strcasestr.h).
+ * The following license statement only applies to this libretro SDK code part (glsym).
  * ---------------------------------------------------------------------------------------
  *
  * Permission is hereby granted, free of charge,
@@ -20,33 +20,26 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef __LIBRETRO_SDK_COMPAT_STRCASESTR_H
-#define __LIBRETRO_SDK_COMPAT_STRCASESTR_H
-
+#include <stdint.h>
 #include <string.h>
 
-#if defined(PS2)
-#include <compat_ctype.h>
-#endif
+#include <glsym/rglgen.h>
+#include <glsym/glsym.h>
 
-#if defined(RARCH_INTERNAL) && defined(HAVE_CONFIG_H)
-#include "../../../config.h"
-#endif
+void rglgen_resolve_symbols_custom(rglgen_proc_address_t proc,
+      const struct rglgen_sym_map *map)
+{
+   for (; map->sym; map++)
+   {
+      rglgen_func_t func = proc(map->sym);
+      memcpy(map->ptr, &func, sizeof(func));
+   }
+}
 
-#ifndef HAVE_STRCASESTR
+void rglgen_resolve_symbols(rglgen_proc_address_t proc)
+{
+   if (!proc)
+      return;
 
-#include <retro_common_api.h>
-
-RETRO_BEGIN_DECLS
-
-/* Avoid possible naming collisions during link
- * since we prefer to use the actual name. */
-#define strcasestr(haystack, needle) strcasestr_retro__(haystack, needle)
-
-char *strcasestr(const char *haystack, const char *needle);
-
-RETRO_END_DECLS
-
-#endif
-
-#endif
+   rglgen_resolve_symbols_custom(proc, rglgen_symbol_map);
+}

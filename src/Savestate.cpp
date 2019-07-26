@@ -16,9 +16,18 @@
     with melonDS. If not, see http://www.gnu.org/licenses/.
 */
 
+#include <cstdlib>
 #include <stdio.h>
 #include "Savestate.h"
 #include "Platform.h"
+
+#ifdef __LIBRETRO__
+#define fclose(stream) memstream_close(stream)
+#define fread(data, len, count, stream) memstream_read(stream, data, len)
+#define fwrite(data, len, count, stream) memstream_write(stream, data, len)
+#define fseek(stream, offset, mask) memstream_seek(stream, offset, mask)
+#define ftell(stream) memstream_pos(stream)
+#endif
 
 /*
     Savestate format
@@ -47,7 +56,11 @@
     * different minor means adjustments may have to be made
 */
 
+#ifdef __LIBRETRO__
+Savestate::Savestate(void *data, size_t size, bool save)
+#else
 Savestate::Savestate(const char* filename, bool save)
+#endif
 {
     const char* magic = "MELN";
 
@@ -56,6 +69,16 @@ Savestate::Savestate(const char* filename, bool save)
     if (save)
     {
         Saving = true;
+#ifdef __LIBRETRO__
+        memstream_set_buffer((uint8_t*)data, size);
+        file = memstream_open(true);
+        if (file == NULL)
+        {
+            printf("unable to create memstream for savestate\n");
+            Error = true;
+            return;
+        }
+#else
         file = Platform::OpenFile(filename, "wb");
         if (!file)
         {
@@ -63,6 +86,7 @@ Savestate::Savestate(const char* filename, bool save)
             Error = true;
             return;
         }
+#endif
 
         VersionMajor = SAVESTATE_MAJOR;
         VersionMinor = SAVESTATE_MINOR;
@@ -75,6 +99,16 @@ Savestate::Savestate(const char* filename, bool save)
     else
     {
         Saving = false;
+#ifdef __LIBRETRO__
+        memstream_set_buffer((uint8_t*)data, size);
+        file = memstream_open(false);
+        if (file == NULL)
+        {
+            printf("unable to create memstream for savestate\n");
+            Error = true;
+            return;
+        }
+#else
         file = Platform::OpenFile(filename, "rb");
         if (!file)
         {
@@ -82,6 +116,7 @@ Savestate::Savestate(const char* filename, bool save)
             Error = true;
             return;
         }
+#endif
 
         u32 len;
         fseek(file, 0, SEEK_END);

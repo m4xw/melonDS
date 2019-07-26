@@ -1,4 +1,5 @@
 INCFLAGS    := -I$(CORE_DIR)/libretro-common/include \
+               -I$(CORE_DIR) \
                -I$(MELON_DIR)
 
 SOURCES_C   :=
@@ -9,28 +10,45 @@ SOURCES_C += $(CORE_DIR)/libretro-common/rthreads/rthreads.c
 endif
 SOURCES_C  += $(CORE_DIR)/libretro-common/compat/compat_strl.c \
               $(CORE_DIR)/libretro-common/compat/fopen_utf8.c \
+              $(CORE_DIR)/libretro-common/compat/compat_strcasestr.c \
               $(CORE_DIR)/libretro-common/encodings/encoding_utf.c \
+              $(CORE_DIR)/libretro-common/file/file_path.c \
               $(CORE_DIR)/libretro-common/streams/file_stream.c \
               $(CORE_DIR)/libretro-common/streams/file_stream_transforms.c \
+              $(CORE_DIR)/libretro-common/streams/memory_stream.c \
+              $(CORE_DIR)/libretro-common/string/stdstring.c \
               $(CORE_DIR)/libretro-common/vfs/vfs_implementation.c
 endif
 
 SOURCES_CXX := $(MELON_DIR)/NDS.cpp \
-					$(MELON_DIR)/ARM.cpp \
-					$(MELON_DIR)/ARMInterpreter.cpp \
-					$(MELON_DIR)/ARMInterpreter_ALU.cpp \
-					$(MELON_DIR)/ARMInterpreter_Branch.cpp \
-					$(MELON_DIR)/ARMInterpreter_LoadStore.cpp \
-					$(MELON_DIR)/CP15.cpp \
-					$(MELON_DIR)/DMA.cpp \
-					$(MELON_DIR)/GPU.cpp \
-					$(MELON_DIR)/GPU2D.cpp \
-					$(MELON_DIR)/GPU3D.cpp \
-					$(MELON_DIR)/GPU3D_Soft.cpp \
-					$(MELON_DIR)/NDSCart.cpp \
-					$(MELON_DIR)/RTC.cpp \
-					$(MELON_DIR)/SPI.cpp \
-					$(MELON_DIR)/SPU.cpp \
-					$(MELON_DIR)/Config.cpp \
-					$(MELON_DIR)/Wifi.cpp \
-					$(CORE_DIR)/libretro.cpp
+                    $(MELON_DIR)/ARM.cpp \
+                    $(MELON_DIR)/ARMInterpreter.cpp \
+                    $(MELON_DIR)/ARMInterpreter_ALU.cpp \
+                    $(MELON_DIR)/ARMInterpreter_Branch.cpp \
+                    $(MELON_DIR)/ARMInterpreter_LoadStore.cpp \
+                    $(MELON_DIR)/CP15.cpp \
+                    $(MELON_DIR)/CRC32.cpp \
+                    $(MELON_DIR)/DMA.cpp \
+                    $(MELON_DIR)/GPU.cpp \
+                    $(MELON_DIR)/GPU2D.cpp \
+                    $(MELON_DIR)/GPU3D.cpp \
+                    $(MELON_DIR)/GPU3D_Soft.cpp \
+                    $(MELON_DIR)/NDSCart.cpp \
+                    $(MELON_DIR)/RTC.cpp \
+                    $(MELON_DIR)/Savestate.cpp \
+                    $(MELON_DIR)/SPI.cpp \
+                    $(MELON_DIR)/SPU.cpp \
+                    $(MELON_DIR)/Wifi.cpp \
+                    $(MELON_DIR)/WifiAP.cpp \
+                    $(CORE_DIR)/libretro.cpp \
+                    $(CORE_DIR)/screenlayout.cpp
+
+ifeq ($(HAVE_OPENGL), 1)
+SOURCES_C += $(CORE_DIR)/libretro-common/glsym/rglgen.c \
+             $(CORE_DIR)/libretro-common/glsym/glsym_gl.c
+
+SOURCES_CXX += $(MELON_DIR)/GPU3D_OpenGL.cpp \
+               $(MELON_DIR)/OpenGLSupport.cpp
+
+DEFINES += -DHAVE_OPENGL
+endif
