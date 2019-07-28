@@ -1,7 +1,9 @@
 #include <cstdio>
 #include "screenlayout.h"
 
-ScreenLayout current_screen_layout;
+#include "Config.h"
+
+ScreenLayout current_screen_layout = ScreenLayout::TopBottom;
 ScreenLayoutData screen_layout_data;
 
 void update_screenlayout(ScreenLayout layout, ScreenLayoutData *data, bool opengl)
@@ -10,6 +12,17 @@ void update_screenlayout(ScreenLayout layout, ScreenLayoutData *data, bool openg
     data->pixel_size = pixel_size;
 
     unsigned scale = 1; // ONLY SUPPORTED BY OPENGL RENDERER
+
+    if(opengl)
+    {
+        // To avoid some issues the size should be at least 4x the native res
+        if(Config::GL_ScaleFactor > 4)
+            scale = Config::GL_ScaleFactor;
+        else
+            scale = 4;
+    }
+
+    data->scale = scale;
 
     unsigned old_size = data->buffer_stride * data->buffer_height;
 
@@ -64,7 +77,7 @@ void update_screenlayout(ScreenLayout layout, ScreenLayoutData *data, bool openg
             data->touch_offset_y = 0;
 
             data->top_screen_offset = 0;
-            data->bottom_screen_offset = (VIDEO_WIDTH * 2);
+            data->bottom_screen_offset = (data->screen_width * 2);
 
             break;
         case ScreenLayout::RightLeft:
@@ -78,7 +91,7 @@ void update_screenlayout(ScreenLayout layout, ScreenLayoutData *data, bool openg
             data->touch_offset_x = 0;
             data->touch_offset_y = 0;
 
-            data->top_screen_offset = (VIDEO_WIDTH * 2);
+            data->top_screen_offset = (data->screen_width * 2);
             data->bottom_screen_offset = 0;
 
             break;

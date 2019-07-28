@@ -21,6 +21,7 @@ struct ScreenLayoutData
     bool enable_bottom_screen;
     bool direct_copy;
     unsigned pixel_size;
+    unsigned scale;
 
     unsigned screen_width;
     unsigned screen_height;

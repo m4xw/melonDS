@@ -44,7 +44,8 @@ SOURCES_CXX := $(MELON_DIR)/NDS.cpp \
                     $(CORE_DIR)/screenlayout.cpp
 
 ifeq ($(HAVE_OPENGL), 1)
-SOURCES_C += $(CORE_DIR)/libretro-common/glsym/rglgen.c \
+SOURCES_C += $(CORE_DIR)/libretro-common/glsm/glsm.c \
+             $(CORE_DIR)/libretro-common/glsym/rglgen.c \
              $(CORE_DIR)/libretro-common/glsym/glsym_gl.c
 
 SOURCES_CXX += $(MELON_DIR)/GPU3D_OpenGL.cpp \

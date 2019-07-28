@@ -76,7 +76,8 @@ ifeq ($(platform), unix)
    TARGET := $(TARGET_NAME)_libretro.$(EXT)
    fpic := -fPIC
    SHARED := -shared -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined
-	#LIBS +=-lpthread
+   LIBS +=-lpthread -lGL
+   HAVE_OPENGL=1
 else ifeq ($(platform), linux-portable)
    TARGET := $(TARGET_NAME)_libretro.$(EXT)
    fpic := -fPIC -nostdlib
@@ -163,11 +164,12 @@ else ifeq ($(platform), classic_armv7_a7)
 else ifeq ($(platform), libnx)
    include $(DEVKITPRO)/libnx/switch_rules
    TARGET := $(TARGET_NAME)_libretro_$(platform).a
-   DEFINES := -DSWITCH=1 -D__SWITCH__=1
-   CFLAGS := $(DEFINES) -fPIE -I$(LIBNX)/include/ -ffunction-sections -fdata-sections -ftls-model=local-exec -specs=$(LIBNX)/switch.specs
+   DEFINES := -DSWITCH=1 -D__SWITCH__=1 -DHAVE_LIBNX=1
+   CFLAGS := $(DEFINES) -fPIE -I$(LIBNX)/include/ -I$(PORTLIBS)/include/ -ffunction-sections -fdata-sections -ftls-model=local-exec -specs=$(LIBNX)/switch.specs
    CFLAGS += -march=armv8-a -mtune=cortex-a57 -mtp=soft -mcpu=cortex-a57+crc+fp+simd -ffast-math
    CXXFLAGS := $(ASFLAGS) $(CFLAGS)
    STATIC_LINKING = 1
+   HAVE_OPENGL = 1
 #######################################
 
 # Windows MSVC 2017 all architectures

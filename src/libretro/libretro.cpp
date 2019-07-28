@@ -58,6 +58,44 @@ socket_t MPSocket;
 sockaddr_t MPSendAddr;
 u8 PacketBuffer[2048];
 
+static bool initialized_opengl = false; // if the opengl context has initialized
+static bool using_opengl = false; // if the opengl renderer is currently used
+static bool update_opengl = true; // update the ubo / vao
+
+enum CurrentRenderer
+{
+   None,
+   Software,
+   OpenGL,
+};
+
+static CurrentRenderer current_renderer = CurrentRenderer::None;
+
+#ifdef HAVE_OPENGL
+#include <glsm/glsmsym.h>
+struct retro_hw_render_callback hw_render;
+
+#include "OpenGLSupport.h"
+#include "shaders.h"
+static GLuint shader[3];
+static GLuint screen_framebuffer_texture;
+static float screen_vertices[2 * 3 * 2 * 4];
+static GLuint vao, vbo;
+
+struct
+{
+   GLfloat uScreenSize[2];
+   u32 u3DScale;
+   u32 uFilterMode;
+   GLint cursorPos[4];
+
+} GL_ShaderConfig;
+GLuint ubo;
+
+#endif
+
+#define CURSOR_SIZE 2 // TODO: Maybe make this adjustable
+
 #define NIFI_VER 1
 
 #ifdef HAVE_THREADS
@@ -85,7 +123,7 @@ ssem_t *ssem_new(int value)
 
    if (!semaphore)
       goto error;
-   
+
    semaphore->value   = value;
    semaphore->wakeups = 0;
    semaphore->mutex   = slock_new();
@@ -204,6 +242,8 @@ void retro_init(void)
 
    if (environ_cb(RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY, &dir) && dir)
       sprintf(retro_saves_directory, "%s", dir);
+
+   screen_layout_data.buffer_ptr = nullptr;
 }
 
 void retro_deinit(void)
@@ -591,6 +631,13 @@ FILE* OpenFile(const char* path, const char* mode, bool mustexist)
       return 0;
 #endif
    }
+
+#ifdef HAVE_OPENGL
+   void* GL_GetProcAddress(const char* proc)
+   {
+      return (void*)hw_render.get_proc_address(proc);
+   }
+#endif
 };
 
 void retro_get_system_av_info(struct retro_system_av_info *info)
@@ -604,6 +651,122 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
    info->geometry.aspect_ratio = (float)screen_layout_data.buffer_width / (float)screen_layout_data.buffer_height;
 }
 
+#ifdef HAVE_OPENGL
+bool setup_opengl(void)
+{
+   if (!OpenGL_BuildShaderProgram(vertex_shader, fragment_shader, shader, "ScreenShader"))
+      return false;
+
+   glBindAttribLocation(shader[2], 0, "vPosition");
+   glBindAttribLocation(shader[2], 1, "vTexcoord");
+   glBindFragDataLocation(shader[2], 0, "oColor");
+
+   if (!OpenGL_LinkShaderProgram(shader))
+      return false;
+
+   GLuint uni_id;
+
+   uni_id = glGetUniformBlockIndex(shader[2], "uConfig");
+   glUniformBlockBinding(shader[2], uni_id, 16);
+
+   glUseProgram(shader[2]);
+   uni_id = glGetUniformLocation(shader[2], "ScreenTex");
+   glUniform1i(uni_id, 0);
+   uni_id = glGetUniformLocation(shader[2], "_3DTex");
+   glUniform1i(uni_id, 1);
+
+   memset(&GL_ShaderConfig, 0, sizeof(GL_ShaderConfig));
+
+   glGenBuffers(1, &ubo);
+   glBindBuffer(GL_UNIFORM_BUFFER, ubo);
+   glBufferData(GL_UNIFORM_BUFFER, sizeof(GL_ShaderConfig), &GL_ShaderConfig, GL_STATIC_DRAW);
+   glBindBufferBase(GL_UNIFORM_BUFFER, 16, ubo);
+
+   glGenBuffers(1, &vbo);
+   glBindBuffer(GL_ARRAY_BUFFER, vbo);
+   glBufferData(GL_ARRAY_BUFFER, sizeof(screen_vertices), NULL, GL_STATIC_DRAW);
+
+   glGenVertexArrays(1, &vao);
+   glBindVertexArray(vao);
+   glEnableVertexAttribArray(0); // position
+   glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4*4, (void*)(0));
+   glEnableVertexAttribArray(1); // texcoord
+   glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4*4, (void*)(2*4));
+
+   glGenTextures(1, &screen_framebuffer_texture);
+   glActiveTexture(GL_TEXTURE0);
+   glBindTexture(GL_TEXTURE_2D, screen_framebuffer_texture);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8UI, 256*3 + 1, 192*2, 0, GL_RGBA_INTEGER, GL_UNSIGNED_BYTE, NULL);
+
+   update_opengl = true;
+
+   return true;
+}
+
+static void context_reset(void)
+{
+   if(using_opengl)
+      GPU3D::DeInitRenderer();
+
+   glsm_ctl(GLSM_CTL_STATE_CONTEXT_RESET, NULL);
+
+   if (!glsm_ctl(GLSM_CTL_STATE_SETUP, NULL))
+      return;
+
+   setup_opengl();
+
+   if(using_opengl)
+      GPU3D::InitRenderer(true);
+
+   initialized_opengl = true;
+   using_opengl = true;
+}
+
+static void context_destroy(void)
+{
+   initialized_opengl = false;
+}
+
+static bool context_framebuffer_lock(void *data)
+{
+    return false;
+}
+
+bool initialize_opengl(void)
+{
+   glsm_ctx_params_t params = {0};
+
+   params.context_type     = RETRO_HW_CONTEXT_OPENGL;
+   params.major            = 3;
+   params.minor            = 3;
+   params.context_reset    = context_reset;
+   params.context_destroy  = context_destroy;
+   params.environ_cb       = environ_cb;
+   params.stencil          = false;
+   params.framebuffer_lock = context_framebuffer_lock;
+
+   if (!glsm_ctl(GLSM_CTL_STATE_CONTEXT_INIT, &params))
+   {
+      log_cb(RETRO_LOG_ERROR, "Could not setup glsm, falling back to software rasterization.\n");
+      return false;
+   }
+
+   return true;
+}
+
+void destroy_opengl(void)
+{
+   if (!glsm_ctl(GLSM_CTL_STATE_CONTEXT_DESTROY, NULL))
+   {
+      log_cb(RETRO_LOG_ERROR, "Could not destroy glsm context.\n");
+   }
+}
+#endif
+
 static struct retro_rumble_interface rumble;
 
 void retro_set_environment(retro_environment_t cb)
@@ -611,12 +774,35 @@ void retro_set_environment(retro_environment_t cb)
    struct retro_vfs_interface_info vfs_iface_info;
    environ_cb = cb;
 
+#ifdef HAVE_OPENGL
+   std::string opengl_resolution = "OpenGL Internal Resolution; ";
+
+   static const int MAX_SCALE = 8;
+
+   char temp[100];
+   for(int i = 1; i <= MAX_SCALE; i++)
+   {
+      temp[0] = 0;
+      snprintf(temp, sizeof(temp), "%ix native (%ix%i)", i, VIDEO_WIDTH * i, VIDEO_HEIGHT * i);
+      std::string param = temp;
+
+      opengl_resolution.append(param);
+
+      if(i != MAX_SCALE)
+         opengl_resolution.append("|");
+   }
+#endif
+
   static const retro_variable values[] =
    {
       { "melonds_boot_directly", "Boot game directly; enabled|disabled" },
       { "melonds_screen_layout", "Screen Layout; Top/Bottom|Bottom/Top|Left/Right|Right/Left|Top Only|Bottom Only" },
       { "melonds_threaded_renderer", "Threaded software renderer; disabled|enabled" },
       { "melonds_touch_mode", "Touch mode; disabled|Mouse|Touch" },
+#ifdef HAVE_OPENGL
+      { "melonds_opengl_renderer", "OpenGL Renderer (Restart); disabled|enabled" },
+      { "melonds_opengl_resolution", opengl_resolution.c_str() },
+#endif
       { 0, 0 }
    };
 
@@ -696,7 +882,7 @@ static void update_input(void)
       bool key = !!((keys >> i) & 1);
       uint8_t nds_key = i > 9 ? i + 6 : i;
 
-      
+
       if (key) {
          NDS::PressKey(nds_key);
       } else {
@@ -718,8 +904,8 @@ static void update_input(void)
 
                touching = input_state_cb(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_LEFT);
 
-               touch_x = Clamp(touch_x + mouse_x, 0, screen_layout_data.screen_width);
-               touch_y = Clamp(touch_y + mouse_y, 0, screen_layout_data.screen_height);
+               touch_x = Clamp(touch_x + mouse_x, 0, VIDEO_WIDTH);
+               touch_y = Clamp(touch_y + mouse_y, 0, VIDEO_HEIGHT);
             }
 
             break;
@@ -767,7 +953,7 @@ static void update_input(void)
 }
 
 
-static void check_variables(void)
+static void check_variables(bool init)
 {
    struct retro_variable var = {0};
 
@@ -800,8 +986,6 @@ static void check_variables(void)
       layout = ScreenLayout::TopBottom;
    }
 
-   update_screenlayout(layout, &screen_layout_data, false);
-
    var.key = "melonds_threaded_renderer";
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
@@ -811,16 +995,60 @@ static void check_variables(void)
          Config::Threaded3D = false;
    }
 
+   TouchMode new_touch_mode;
+
    var.key = "melonds_touch_mode";
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
       if (!strcmp(var.value, "Mouse"))
-         current_touch_mode = TouchMode::Mouse;
+         new_touch_mode = TouchMode::Mouse;
       else if (!strcmp(var.value, "Touch"))
-         current_touch_mode = TouchMode::Touch;
+         new_touch_mode = TouchMode::Touch;
       else
-         current_touch_mode = TouchMode::Disabled;
+         new_touch_mode = TouchMode::Disabled;
    }
+
+#ifdef HAVE_OPENGL
+   bool gl_update = false;
+
+   if(current_touch_mode != new_touch_mode) // Hide the cursor
+      gl_update = true;
+
+   if(init) // Until crashes are fixed, this should only be set on init
+   {
+      var.key = "melonds_opengl_renderer";
+      if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+      {
+         if (!strcmp(var.value, "enabled"))
+            Config::_3DRenderer = true;
+         else
+            Config::_3DRenderer = false;
+      }
+   }
+
+   var.key = "melonds_opengl_resolution";
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      int first_char_val = (int)var.value[0];
+      int scaleing = Clamp(first_char_val - 48, 0, 8);
+
+      if(Config::GL_ScaleFactor != scaleing)
+         gl_update = true;
+
+      Config::GL_ScaleFactor = scaleing;
+   }
+   else
+   {
+      Config::GL_ScaleFactor = 1;
+   }
+
+   if((using_opengl && gl_update) || layout != current_screen_layout)
+      update_opengl = true;
+#endif
+
+   current_touch_mode = new_touch_mode;
+
+   update_screenlayout(layout, &screen_layout_data, Config::_3DRenderer);
 }
 
 static void audio_callback(void)
@@ -849,7 +1077,6 @@ void copy_screen(ScreenLayoutData *data, uint32_t* src, unsigned offset)
    }
 }
 
-#define CURSOR_SIZE 2
 void draw_cursor(ScreenLayoutData *data, int32_t x, int32_t y)
 {
    uint32_t* base_offset = (uint32_t*)data->buffer_ptr;
@@ -873,27 +1100,189 @@ void draw_cursor(ScreenLayoutData *data, int32_t x, int32_t y)
 
 void retro_run(void)
 {
+   if (current_renderer == CurrentRenderer::None)
+   {
+ #ifdef HAVE_OPENGL
+         if (Config::_3DRenderer && using_opengl)
+         {
+            glsm_ctl(GLSM_CTL_STATE_BIND, NULL);
+            GPU3D::InitRenderer(true);
+            glsm_ctl(GLSM_CTL_STATE_UNBIND, NULL);
+
+            current_renderer = CurrentRenderer::OpenGL;
+         }
+         else
+         {
+#endif
+            GPU3D::InitRenderer(false);
+            current_renderer = CurrentRenderer::Software;
+#ifdef HAVE_OPENGL
+         }
+#endif
+   }
+
    update_input();
+#ifdef HAVE_OPENGL
+   if(using_opengl)
+      glsm_ctl(GLSM_CTL_STATE_BIND, NULL);
+
+   if(using_opengl && update_opengl)
+      GPU3D::UpdateRendererConfig();
+#endif
+
    NDS::RunFrame();
 
    int frontbuf = GPU::FrontBuffer;
 
-   if(screen_layout_data.enable_top_screen)
-      copy_screen(&screen_layout_data, GPU::Framebuffer[frontbuf][0], screen_layout_data.top_screen_offset);
-   if(screen_layout_data.enable_bottom_screen)
-      copy_screen(&screen_layout_data, GPU::Framebuffer[frontbuf][1], screen_layout_data.bottom_screen_offset);
+   if(using_opengl)
+   {
+#ifdef HAVE_OPENGL
+      bool virtual_cursor = current_touch_mode == TouchMode::Mouse;
+      glBindFramebuffer(GL_FRAMEBUFFER, glsm_get_current_framebuffer());
 
-   if(current_touch_mode == TouchMode::Mouse && current_screen_layout != ScreenLayout::TopOnly)
-      draw_cursor(&screen_layout_data, touch_x, touch_y);
+      if(update_opengl)
+      {
+         update_opengl = false;
 
-   video_cb((uint8_t*)screen_layout_data.buffer_ptr, screen_layout_data.buffer_width, screen_layout_data.buffer_height, screen_layout_data.buffer_width * sizeof(uint32_t));
+         GL_ShaderConfig.uScreenSize[0] = screen_layout_data.buffer_width;
+         GL_ShaderConfig.uScreenSize[1] = screen_layout_data.buffer_height;
+         GL_ShaderConfig.u3DScale = Config::GL_ScaleFactor;
+         GL_ShaderConfig.cursorPos[0] = -1;
+         GL_ShaderConfig.cursorPos[1] = -1;
+         GL_ShaderConfig.cursorPos[2] = -1;
+         GL_ShaderConfig.cursorPos[3] = -1;
+
+         glBindBuffer(GL_UNIFORM_BUFFER, ubo);
+         void* unibuf = glMapBuffer(GL_UNIFORM_BUFFER, GL_WRITE_ONLY);
+         if (unibuf) memcpy(unibuf, &GL_ShaderConfig, sizeof(GL_ShaderConfig));
+         glUnmapBuffer(GL_UNIFORM_BUFFER);
+
+         float screen_width = (float)screen_layout_data.screen_width;
+         float screen_height = (float)screen_layout_data.screen_height;
+
+         float top_screen_x = 0.0f;
+         float top_screen_y = 0.0f;
+
+         float bottom_screen_x = 0.0f;
+         float bottom_screen_y = 0.0f;
+
+         switch (current_screen_layout)
+         {
+            case ScreenLayout::TopBottom:
+               bottom_screen_y = screen_height;
+               break;
+           case ScreenLayout::BottomTop:
+               top_screen_y = screen_height;
+               break;
+           case ScreenLayout::LeftRight:
+               bottom_screen_x = screen_width;
+               break;
+           case ScreenLayout::RightLeft:
+               top_screen_x = screen_width;
+               break;
+           case ScreenLayout::TopOnly:
+               bottom_screen_y = screen_height; // Meh, let's just hide it
+               break;
+           case ScreenLayout::BottomOnly:
+               top_screen_y = screen_height; // ditto
+               break;
+         }
+
+         #define SETVERTEX(i, x, y, t_x, t_y) \
+            screen_vertices[(4 * i) + 0] = x; \
+            screen_vertices[(4 * i) + 1] = y; \
+            screen_vertices[(4 * i) + 2] = t_x; \
+            screen_vertices[(4 * i) + 3] = t_y;
+
+         // top screen
+         SETVERTEX(0, top_screen_x, top_screen_y, 0.0f, 0.0f); // top left
+         SETVERTEX(1, top_screen_x, top_screen_y + screen_height, 0.0f, VIDEO_HEIGHT); // bottom left
+         SETVERTEX(2, top_screen_x + screen_width, top_screen_y + screen_height, VIDEO_WIDTH,  VIDEO_HEIGHT); // bottom right
+         SETVERTEX(3, top_screen_x, top_screen_y, 0.0f, 0.0f); // top left
+         SETVERTEX(4, top_screen_x + screen_width, top_screen_y, VIDEO_WIDTH, 0.0f); // top right
+         SETVERTEX(5, top_screen_x + screen_width, top_screen_y + screen_height, VIDEO_WIDTH,  VIDEO_HEIGHT); // bottom right
+
+         // bottom screen
+         SETVERTEX(6, bottom_screen_x, bottom_screen_y, 0.0f, VIDEO_HEIGHT); // top left
+         SETVERTEX(7, bottom_screen_x, bottom_screen_y + screen_height, 0.0f, VIDEO_HEIGHT * 2.0f); // bottom left
+         SETVERTEX(8, bottom_screen_x + screen_width, bottom_screen_y + screen_height, VIDEO_WIDTH,  VIDEO_HEIGHT * 2.0f); // bottom right
+         SETVERTEX(9, bottom_screen_x, bottom_screen_y, 0.0f, VIDEO_HEIGHT); // top left
+         SETVERTEX(10, bottom_screen_x + screen_width, bottom_screen_y, VIDEO_WIDTH, VIDEO_HEIGHT); // top right
+         SETVERTEX(11, bottom_screen_x + screen_width, bottom_screen_y + screen_height, VIDEO_WIDTH, VIDEO_HEIGHT * 2.0f); // bottom right
+
+         glBindBuffer(GL_ARRAY_BUFFER, vbo);
+         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(screen_vertices), screen_vertices);
+      }
+
+      if(virtual_cursor)
+      {
+         GL_ShaderConfig.cursorPos[0] = touch_x - CURSOR_SIZE;
+         GL_ShaderConfig.cursorPos[1] = touch_y - CURSOR_SIZE;
+         GL_ShaderConfig.cursorPos[2] = touch_x + CURSOR_SIZE;
+         GL_ShaderConfig.cursorPos[3] = touch_y + CURSOR_SIZE;
+
+         glBindBuffer(GL_UNIFORM_BUFFER, ubo);
+         void* unibuf = glMapBuffer(GL_UNIFORM_BUFFER, GL_WRITE_ONLY);
+         if (unibuf) memcpy(unibuf, &GL_ShaderConfig, sizeof(GL_ShaderConfig));
+         glUnmapBuffer(GL_UNIFORM_BUFFER);
+      }
+
+      glDisable(GL_DEPTH_TEST);
+      glDisable(GL_STENCIL_TEST);
+      glDisable(GL_BLEND);
+      glColorMaski(0, GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
+      glViewport(0, 0, screen_layout_data.buffer_width, screen_layout_data.buffer_height);
+
+      OpenGL_UseShaderProgram(shader);
+
+      glClearColor(0, 0, 0, 1);
+      glClear(GL_COLOR_BUFFER_BIT);
+
+      glActiveTexture(GL_TEXTURE0);
+      glBindTexture(GL_TEXTURE_2D, screen_framebuffer_texture);
+
+      if (GPU::Framebuffer[frontbuf][0] && GPU::Framebuffer[frontbuf][1])
+      {
+         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 256*3 + 1, 192, GL_RGBA_INTEGER,
+                        GL_UNSIGNED_BYTE, GPU::Framebuffer[frontbuf][0]);
+         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 192, 256*3 + 1, 192, GL_RGBA_INTEGER,
+                        GL_UNSIGNED_BYTE, GPU::Framebuffer[frontbuf][1]);
+      }
+
+      glActiveTexture(GL_TEXTURE1);
+      GPU3D::GLRenderer::SetupAccelFrame();
+
+      glBindBuffer(GL_ARRAY_BUFFER, vbo);
+      glBindVertexArray(vao);
+      glDrawArrays(GL_TRIANGLES, 0, 4*3);
+
+      glFlush();
+
+      glsm_ctl(GLSM_CTL_STATE_UNBIND, NULL);
+
+      video_cb(RETRO_HW_FRAME_BUFFER_VALID, screen_layout_data.buffer_width, screen_layout_data.buffer_height, 0);
+#endif
+   }
+   else
+   {
+      if(screen_layout_data.enable_top_screen)
+         copy_screen(&screen_layout_data, GPU::Framebuffer[frontbuf][0], screen_layout_data.top_screen_offset);
+      if(screen_layout_data.enable_bottom_screen)
+         copy_screen(&screen_layout_data, GPU::Framebuffer[frontbuf][1], screen_layout_data.bottom_screen_offset);
+
+      if(current_touch_mode == TouchMode::Mouse && current_screen_layout != ScreenLayout::TopOnly)
+         draw_cursor(&screen_layout_data, touch_x, touch_y);
+
+      video_cb((uint8_t*)screen_layout_data.buffer_ptr, screen_layout_data.buffer_width, screen_layout_data.buffer_height, screen_layout_data.buffer_width * sizeof(uint32_t));
+   }
 
    audio_callback();
 
    bool updated = false;
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &updated) && updated)
    {
-      check_variables();
+      check_variables(false);
 
       struct retro_system_av_info updated_av_info;
       retro_get_system_av_info(&updated_av_info);
@@ -928,7 +1317,12 @@ bool retro_load_game(const struct retro_game_info *info)
       return false;
    }
 
-   check_variables();
+   check_variables(true);
+
+#ifdef HAVE_OPENGL
+   if (Config::_3DRenderer)
+      initialize_opengl();
+#endif
 
    if(!NDS::Init())
       return false;
@@ -939,9 +1333,6 @@ bool retro_load_game(const struct retro_game_info *info)
    std::string save_path = std::string(retro_saves_directory) + std::string(1, platformDirSeparator) + std::string(game_name) + ".sav";
 
    NDS::LoadROM(info->path, save_path.c_str(), Config::DirectBoot);
-
-   GPU3D::InitRenderer(false);
-   GPU3D::UpdateRendererConfig();
 
    (void)info;
    if (!retro_firmware_status)
