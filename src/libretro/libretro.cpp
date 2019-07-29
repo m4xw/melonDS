@@ -202,13 +202,13 @@ void retro_init(void)
    if (environ_cb(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &dir) && dir)
       sprintf(retro_base_directory, "%s", dir);
 
-	if (environ_cb(RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY, &dir) && dir)
+   if (environ_cb(RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY, &dir) && dir)
       sprintf(retro_saves_directory, "%s", dir);
 }
 
 void retro_deinit(void)
 {
-	return;
+   return;
 }
 
 unsigned retro_api_version(void)
@@ -642,7 +642,7 @@ void retro_set_environment(retro_environment_t cb)
    vfs_iface_info.required_interface_version = FILESTREAM_REQUIRED_VFS_VERSION;
    vfs_iface_info.iface = NULL;
    if (environ_cb(RETRO_ENVIRONMENT_GET_VFS_INTERFACE, &vfs_iface_info))
-	   filestream_vfs_init(&vfs_iface_info);
+      filestream_vfs_init(&vfs_iface_info);
 }
 
 void retro_set_audio_sample(retro_audio_sample_t cb)
@@ -936,7 +936,7 @@ bool retro_load_game(const struct retro_game_info *info)
    char game_name[256];
    fill_pathname_base_noext(game_name, info->path, sizeof(game_name));
 
-   std::string save_path = std::string(retro_saves_directory) + std::string(game_name) + ".sav";
+   std::string save_path = std::string(retro_saves_directory) + std::string(1, platformDirSeparator) + std::string(game_name) + ".sav";
 
    NDS::LoadROM(info->path, save_path.c_str(), Config::DirectBoot);
 
