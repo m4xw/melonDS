@@ -24,6 +24,10 @@
 #include "CRC32.h"
 #include "Platform.h"
 
+#ifdef __LIBRETRO__
+#include "streams/memory_stream.h"
+#include "romlist.h"
+#endif
 
 namespace NDSCart_SRAM
 {
@@ -811,14 +815,25 @@ void ApplyDLDIPatch()
 }
 
 
+#ifdef __LIBRETRO__
+#define fclose(stream) memstream_close(stream)
+#define fread(data, len, count, stream) memstream_read(stream, data, len)
+#define fseek(stream, offset, mask) memstream_seek(stream, offset, mask)
+#define ftell(stream) memstream_pos(stream)
+#endif
+
 bool ReadROMParams(u32 gamecode, u32* params)
 {
     // format for romlist.bin:
     // [gamecode] [ROM size] [save type] [reserved]
     // list must be sorted by gamecode
-
+#ifdef __LIBRETRO__
+    memstream_set_buffer((uint8_t*)______romlist_bin, ______romlist_bin_len);
+    memstream_t* f = memstream_open(false);
+#else
     FILE* f = Platform::OpenLocalFile("romlist.bin", "rb");
     if (!f) return false;
+#endif
 
     fseek(f, 0, SEEK_END);
     u32 len = (u32)ftell(f);
@@ -867,6 +882,12 @@ bool ReadROMParams(u32 gamecode, u32* params)
     }
 }
 
+#ifdef __LIBRETRO__
+#undef fclose
+#undef fread
+#undef fseek
+#undef ftell
+#endif
 
 bool LoadROM(const char* path, const char* sram, bool direct)
 {
