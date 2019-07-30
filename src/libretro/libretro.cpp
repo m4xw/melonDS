@@ -728,6 +728,13 @@ static void context_reset(void)
 
 static void context_destroy(void)
 {
+   glDeleteTextures(1, &screen_framebuffer_texture);
+
+   glDeleteVertexArrays(1, &vao);
+   glDeleteBuffers(1, &vbo);
+
+   OpenGL_DeleteShaderProgram(shader);
+
    initialized_opengl = false;
 }
 
