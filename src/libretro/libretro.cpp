@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
+#include <vector>
 #include <math.h>
 #include <time.h>
 
@@ -268,7 +269,7 @@ FILE* OpenFile(const char* path, const char* mode, bool mustexist)
 
       if (!relpath)
       {
-         std::string fullpath = std::string(retro_base_directory) + "/melonds/" + path;
+         std::string fullpath = std::string(retro_base_directory) + "/" + path;
          f = OpenFile(fullpath.c_str(), mode, true);
          if (f) { delete[] emudirpath; return f; }
       }
@@ -1232,6 +1233,37 @@ void retro_run(void)
 
 bool retro_load_game(const struct retro_game_info *info)
 {
+   std::vector <std::string> required_roms = {"bios7.bin", "bios9.bin", "firmware.bin"};
+   std::vector <std::string> missing_roms;
+
+   for(std::string& rom : required_roms)
+   {
+      if(!Platform::LocalFileExists(rom.c_str()))
+      {
+         missing_roms.push_back(rom);
+      }
+   }
+
+   if(!missing_roms.empty())
+   {
+      std::string msg = "Missing required bios/firmware in system directory: ";
+
+      int i = 0;
+      int len = missing_roms.size();
+      for (auto missing_rom : missing_roms)
+      {
+         msg.append(missing_rom);
+         if(len - 1 > i) msg.append(", ");
+         i ++;
+      }
+
+      msg.append("\n");
+
+      log_cb(RETRO_LOG_ERROR, msg.c_str());
+
+      return false;
+   }
+
    struct retro_input_descriptor desc[] = {
       { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_LEFT,  "Left" },
       { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_UP,    "Up" },
