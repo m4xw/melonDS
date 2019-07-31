@@ -25,6 +25,12 @@
 #define pcap_dev_name name
 #endif
 
+#ifdef HAVE_LIBNX
+#include <switch.h>
+#define u64 u64_
+#define s64 s64_
+#endif
+
 #if defined(__HAIKU__)
 #include <posix/sys/select.h>
 #endif
@@ -99,101 +105,10 @@ GLuint ubo;
 #define NIFI_VER 1
 
 #ifdef HAVE_THREADS
-/*  Code taken from http://greenteapress.com/semaphores/semaphore.c
- *  and changed to use libretro-common's mutexes and conditions.
- */
-
 #include <stdlib.h>
 
 #include <rthreads/rthreads.h>
-
-typedef struct ssem ssem_t;
-
-struct ssem
-{
-   int value;
-   int wakeups;
-   slock_t *mutex;
-   scond_t *cond;
-};
-
-ssem_t *ssem_new(int value)
-{
-   ssem_t *semaphore = (ssem_t*)calloc(1, sizeof(*semaphore));
-
-   if (!semaphore)
-      goto error;
-
-   semaphore->value   = value;
-   semaphore->wakeups = 0;
-   semaphore->mutex   = slock_new();
-
-   if (!semaphore->mutex)
-      goto error;
-
-   semaphore->cond = scond_new();
-
-   if (!semaphore->cond)
-      goto error;
-
-   return semaphore;
-
-error:
-   if (semaphore->mutex)
-      slock_free(semaphore->mutex);
-   semaphore->mutex = NULL;
-   if (semaphore)
-      free((void*)semaphore);
-   return NULL;
-}
-
-void ssem_free(ssem_t *semaphore)
-{
-   if (!semaphore)
-      return;
-
-   scond_free(semaphore->cond);
-   slock_free(semaphore->mutex);
-   free((void*)semaphore);
-}
-
-void ssem_wait(ssem_t *semaphore)
-{
-   if (!semaphore)
-      return;
-
-   slock_lock(semaphore->mutex);
-   semaphore->value--;
-
-   if (semaphore->value < 0)
-   {
-      do
-      {
-         scond_wait(semaphore->cond, semaphore->mutex);
-      }while (semaphore->wakeups < 1);
-
-      semaphore->wakeups--;
-   }
-
-   slock_unlock(semaphore->mutex);
-}
-
-void ssem_signal(ssem_t *semaphore)
-{
-   if (!semaphore)
-      return;
-
-   slock_lock(semaphore->mutex);
-   semaphore->value++;
-
-   if (semaphore->value <= 0)
-   {
-      semaphore->wakeups++;
-      scond_signal(semaphore->cond);
-   }
-
-   slock_unlock(semaphore->mutex);
-}
+#include <rthreads/rsemaphore.h>
 #endif
 
 static inline int32_t Clamp(int32_t value, int32_t min, int32_t max)
@@ -375,64 +290,78 @@ FILE* OpenFile(const char* path, const char* mode, bool mustexist)
 
    void Semaphore_Reset(void *sema)
    {
-      /* TODO/FIXME */
+   #ifdef HAVE_THREADS
+      while (ssem_trywait((ssem_t*)sema) == true);
+   #endif
    }
 
    void Semaphore_Post(void *sema)
    {
-   #if 0
    #ifdef HAVE_THREADS
       ssem_signal((ssem_t*)sema);
-   #endif
    #endif
    }
 
    void Semaphore_Wait(void *sema)
    {
-   #if 0
    #ifdef HAVE_THREADS
       ssem_wait((ssem_t*)sema);
-   #endif
    #endif
    }
 
    void Semaphore_Free(void *sema)
    {
-   #if 0
    #ifdef HAVE_THREADS
       ssem_t *sem = (ssem_t*)sema;
       if (sem)
          ssem_free(sem);
    #endif
-   #endif
    }
 
    void *Semaphore_Create()
    {
-   #if 0
    #ifdef HAVE_THREADS
       ssem_t *sem = ssem_new(0);
       if (sem)
          return sem;
-   #endif
    #endif
       return NULL;
    }
 
    void Thread_Free(void *thread)
    {
-      /* TODO/FIXME */
+   #if HAVE_THREADS
+   #ifdef HAVE_LIBNX
+      delete (Thread*)thread;
+   #else
+      sthread_detach((sthread_t*)thread);
+   #endif
+   #endif
    }
 
    void *Thread_Create(void (*func)())
    {
-      /* TODO/FIXME */
-      return NULL;
+   #if HAVE_THREADS
+   #ifdef HAVE_LIBNX
+      Thread* thread = (Thread*)malloc(sizeof(Thread));
+      threadCreate(thread, (void(*)(void*))func, NULL, 0x80000, 0x30, 2);
+      threadStart(thread);
+      return thread;
+   #else
+      return (void*)sthread_create((void(*)(void*))func, NULL);
+   #endif
+   #endif
    }
 
    void Thread_Wait(void *thread)
    {
-      /* TODO/FIXME */
+   #if HAVE_THREADS
+   #ifdef HAVE_LIBNX
+      threadWaitForExit((Thread*)thread);
+   #else
+      sthread_join((sthread_t*)thread);
+   #endif
+   #endif
    }
 
 
@@ -804,7 +733,9 @@ void retro_set_environment(retro_environment_t cb)
    {
       { "melonds_boot_directly", "Boot game directly; enabled|disabled" },
       { "melonds_screen_layout", "Screen Layout; Top/Bottom|Bottom/Top|Left/Right|Right/Left|Top Only|Bottom Only" },
+#ifdef HAVE_THREADS
       { "melonds_threaded_renderer", "Threaded software renderer; disabled|enabled" },
+#endif
       { "melonds_touch_mode", "Touch mode; disabled|Mouse|Touch" },
 #ifdef HAVE_OPENGL
       { "melonds_opengl_renderer", "OpenGL Renderer (Restart); disabled|enabled" },
@@ -993,6 +924,7 @@ static void check_variables(bool init)
       layout = ScreenLayout::TopBottom;
    }
 
+#ifdef HAVE_THREADS
    var.key = "melonds_threaded_renderer";
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
@@ -1001,6 +933,7 @@ static void check_variables(bool init)
       else
          Config::Threaded3D = false;
    }
+#endif
 
    TouchMode new_touch_mode;
 

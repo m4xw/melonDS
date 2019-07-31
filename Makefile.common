@@ -5,9 +5,6 @@ INCFLAGS    := -I$(CORE_DIR)/libretro-common/include \
 SOURCES_C   :=
 
 ifneq ($(STATIC_LINKING), 1)
-ifeq ($(HAVE_THREADS), 1)
-SOURCES_C += $(CORE_DIR)/libretro-common/rthreads/rthreads.c
-endif
 SOURCES_C  += $(CORE_DIR)/libretro-common/compat/compat_strl.c \
               $(CORE_DIR)/libretro-common/compat/fopen_utf8.c \
               $(CORE_DIR)/libretro-common/compat/compat_strcasestr.c \
@@ -52,4 +49,10 @@ SOURCES_CXX += $(MELON_DIR)/GPU3D_OpenGL.cpp \
                $(MELON_DIR)/OpenGLSupport.cpp
 
 DEFINES += -DHAVE_OPENGL
+endif
+
+ifeq ($(HAVE_THREADS), 1)
+SOURCES_C += $(CORE_DIR)/libretro-common/rthreads/rthreads.c \
+             $(CORE_DIR)/libretro-common/rthreads/rsemaphore.c
+DEFINES += -DHAVE_THREADS
 endif

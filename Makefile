@@ -78,6 +78,7 @@ ifeq ($(platform), unix)
    SHARED := -shared -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined
    LIBS +=-lpthread -lGL
    HAVE_OPENGL=1
+   HAVE_THREADS=1
 else ifeq ($(platform), linux-portable)
    TARGET := $(TARGET_NAME)_libretro.$(EXT)
    fpic := -fPIC -nostdlib
@@ -170,6 +171,7 @@ else ifeq ($(platform), libnx)
    CXXFLAGS := $(ASFLAGS) $(CFLAGS)
    STATIC_LINKING = 1
    HAVE_OPENGL = 1
+   HAVE_THREADS = 1
 #######################################
 
 # Windows MSVC 2017 all architectures
@@ -332,8 +334,6 @@ include Makefile.common
 
 OBJECTS := $(SOURCES_C:.c=.o) $(SOURCES_CXX:.cpp=.o)
 
-#CFLAGS  += -DHAVE_THREADS
-#CXXFLAGS  += -DHAVE_THREADS
 CXXFLAGS += -std=c++11
 
 CFLAGS   += -Wall -D__LIBRETRO__ $(fpic) $(INCFLAGS) $(DEFINES) $(INCFLAGS_PLATFORM)

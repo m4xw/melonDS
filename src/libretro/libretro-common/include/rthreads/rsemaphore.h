@@ -1,7 +1,7 @@
-/* Copyright  (C) 2010-2018 The RetroArch team
+/* Copyright  (C) 2010-2015 The RetroArch team
  *
  * ---------------------------------------------------------------------------------------
- * The following license statement only applies to this file (xenon_sdl_threads.c).
+ * The following license statement only applies to this file (rsemaphore.h).
  * ---------------------------------------------------------------------------------------
  *
  * Permission is hereby granted, free of charge,
@@ -20,39 +20,37 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-/* libSDLxenon doesn't implement this yet :[. Implement it very stupidly for now. ;) */
+#ifndef __LIBRETRO_SDK_SEMAPHORE_H
+#define __LIBRETRO_SDK_SEMAPHORE_H
 
-#include "SDL_thread.h"
-#include "SDL_mutex.h"
-#include <stdlib.h>
-#include <boolean.h>
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-SDL_cond *SDL_CreateCond(void)
-{
-   bool *sleeping = calloc(1, sizeof(*sleeping));
-   return (SDL_cond*)sleeping;
+typedef struct ssem ssem_t;
+
+/**
+ * ssem_create:
+ * @value                   : initial value for the semaphore
+ *
+ * Create a new semaphore.
+ *
+ * Returns: pointer to new semaphore if successful, otherwise NULL.
+ */
+ssem_t *ssem_new(int value);
+
+void ssem_free(ssem_t *semaphore);
+
+int ssem_get(ssem_t *semaphore);
+
+void ssem_wait(ssem_t *semaphore);
+
+bool ssem_trywait(ssem_t *semaphore);
+
+void ssem_signal(ssem_t *semaphore);
+
+#ifdef __cplusplus
 }
+#endif
 
-void SDL_DestroyCond(SDL_cond *sleeping)
-{
-   free(sleeping);
-}
-
-int SDL_CondWait(SDL_cond *cond, SDL_mutex *lock)
-{
-   (void)lock;
-   volatile bool *sleeping = (volatile bool*)cond;
-
-   SDL_mutexV(lock);
-   *sleeping = true;
-   while (*sleeping); /* Yeah, we all love busyloops don't we? ._. */
-   SDL_mutexP(lock);
-
-   return 0;
-}
-
-int SDL_CondSignal(SDL_cond *cond)
-{
-   *(volatile bool*)cond = false;
-   return 0;
-}
+#endif /* __LIBRETRO_SDK_SEMAPHORE_H */

@@ -1,7 +1,7 @@
-/* Copyright  (C) 2010-2018 The RetroArch team
+/* Copyright  (C) 2010-2015 The RetroArch team
  *
  * ---------------------------------------------------------------------------------------
- * The following license statement only applies to this file (xenon_sdl_threads.c).
+ * The following license statement only applies to this file (async_job.h).
  * ---------------------------------------------------------------------------------------
  *
  * Permission is hereby granted, free of charge,
@@ -20,39 +20,16 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-/* libSDLxenon doesn't implement this yet :[. Implement it very stupidly for now. ;) */
+#ifndef __LIBRETRO_SDK_ASYNC_JOB_H
+#define __LIBRETRO_SDK_ASYNC_JOB_H
 
-#include "SDL_thread.h"
-#include "SDL_mutex.h"
-#include <stdlib.h>
-#include <boolean.h>
+typedef struct async_job async_job_t;
+typedef void (*async_task_t)(void *payload);
 
-SDL_cond *SDL_CreateCond(void)
-{
-   bool *sleeping = calloc(1, sizeof(*sleeping));
-   return (SDL_cond*)sleeping;
-}
+async_job_t *async_job_new(void);
 
-void SDL_DestroyCond(SDL_cond *sleeping)
-{
-   free(sleeping);
-}
+void async_job_free(async_job_t *ajob);
 
-int SDL_CondWait(SDL_cond *cond, SDL_mutex *lock)
-{
-   (void)lock;
-   volatile bool *sleeping = (volatile bool*)cond;
+int async_job_add(async_job_t *ajob, async_task_t task, void *payload);
 
-   SDL_mutexV(lock);
-   *sleeping = true;
-   while (*sleeping); /* Yeah, we all love busyloops don't we? ._. */
-   SDL_mutexP(lock);
-
-   return 0;
-}
-
-int SDL_CondSignal(SDL_cond *cond)
-{
-   *(volatile bool*)cond = false;
-   return 0;
-}
+#endif /* __LIBRETRO_SDK_ASYNC_JOB_H */
