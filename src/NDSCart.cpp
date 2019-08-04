@@ -817,7 +817,7 @@ void ApplyDLDIPatch()
 
 #ifdef __LIBRETRO__
 #define fclose(stream) memstream_close(stream)
-#define fread(data, len, count, stream) memstream_read(stream, data, len)
+#define fread(data, len, count, stream) memstream_read(stream, data, len * count)
 #define fseek(stream, offset, mask) memstream_seek(stream, offset, mask)
 #define ftell(stream) memstream_pos(stream)
 #endif
