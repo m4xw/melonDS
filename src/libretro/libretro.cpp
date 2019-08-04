@@ -137,6 +137,9 @@ char retro_base_directory[4096];
 char retro_saves_directory[4096];
 bool retro_firmware_status;
 
+std::string game_path;
+std::string save_path;
+
 static void fallback_log(enum retro_log_level level, const char *fmt, ...)
 {
    (void)level;
@@ -798,6 +801,7 @@ void retro_set_video_refresh(retro_video_refresh_t cb)
 void retro_reset(void)
 {
    NDS::Reset();
+   NDS::LoadROM(game_path.c_str(), save_path.c_str(), Config::DirectBoot);
 }
 
 static void update_input(void)
@@ -1303,9 +1307,10 @@ bool retro_load_game(const struct retro_game_info *info)
    char game_name[256];
    fill_pathname_base_noext(game_name, info->path, sizeof(game_name));
 
-   std::string save_path = std::string(retro_saves_directory) + std::string(1, platformDirSeparator) + std::string(game_name) + ".sav";
+   game_path = std::string(info->path);
+   save_path = std::string(retro_saves_directory) + std::string(1, platformDirSeparator) + std::string(game_name) + ".sav";
 
-   NDS::LoadROM(info->path, save_path.c_str(), Config::DirectBoot);
+   NDS::LoadROM(game_path.c_str(), save_path.c_str(), Config::DirectBoot);
 
    (void)info;
    if (!retro_firmware_status)
