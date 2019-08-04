@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <string>
 #include <string.h>
 #include <vector>
 #include <math.h>
